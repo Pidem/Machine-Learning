@@ -1,0 +1,169 @@
+rm(list=ls(all=TRUE))
+
+###########################################################
+#### Subset Selection
+###########################################################
+
+library(ISLR) #contains the dataset "hitters"
+library(leaps) #contains the function regsubsets
+head(Hitters) #baseball player dataset. We want to predict Salary based on other variables
+
+#dim(Hitters)
+sum(is.na(Hitters$Salary))
+Hitters=na.omit(Hitters) #omits rows corresponding to NA entries
+#dim(Hitters)
+
+# Make training and test sets
+set.seed(1)
+train=sample(1:nrow(Hitters),0.75*nrow(Hitters))
+test=-train
+
+#nvmax = maximum number of predictors to consider (default = 8)
+#number of predictors in dataset (= 19 in Hitters)
+p = ncol(Hitters) - 1; #we subtract the response variable
+
+#Best Subset Selection using Traditional Approach (see Session 7-8)
+regfit.full=regsubsets(Salary~.,data=Hitters[train,],nvmax=p)
+
+#regfit.full contains p models, where model t is the best model
+#obtained using exactly t predictors (t ranges from 1 to p)
+#Note: for each t, the best model was obtained through minimizing training set MSE
+reg.summary=summary(regfit.full)
+reg.summary
+
+reg.summary$adjr2
+best.model = which.max(reg.summary$adjr2)
+
+#Creating our own "predict" function
+predict.regsubsets=function(regfit.full,newdata,t){
+  #In this problem, form="Salary~.". It represents the modeling argument we inputted when calling regsubsets()
+  form=as.formula(regfit.full$call[[2]])
+  mat=model.matrix(form,newdata) #mat = model.matrix(Salary~., newdata)
+  coefi=coef(regfit.full,id=t) #obtain the coefficients of the model corresponding to t
+  xvars=names(coefi)
+  pred = mat[,xvars]%*%coefi
+  return(pred)
+}
+
+#evaluate the best model on the test set
+pred=predict.regsubsets(regfit.full,Hitters[test,],best.model)
+actual = Hitters$Salary[test];
+mean((actual-pred)^2) #test set MSE
+
+# Forward Stepwise Selection
+regfit.fwd=regsubsets(Salary~.,data=Hitters[train,],nvmax=p,method="forward")
+best.model.fwd = which.max(summary(regfit.fwd)$adjr2)
+
+#Do we obtained the same model with both methods?
+coef(regfit.full,best.model)
+coef(regfit.fwd,best.model.fwd)
+
+#Best Subset Selection using 10-fold Cross Validation
+k=10
+set.seed(1)
+Hitters.train = Hitters[train,]
+#we randomly assign each datapoint in the training set to our k folds. note that in this implementation
+#not all of the folds will necessarily have the same number of data points
+folds=sample(1:k,nrow(Hitters.train),replace=TRUE)
+#cv.errors[j,t] represents the MSE from the best model using t parameters evaluated on fold j
+#note: we initialize all values in this matrix to NA. However, all entries will eventually be filled in.
+cv.errors=array(NA,dim=c(k,p)) 
+for(j in 1:k){
+  #let t = num. of parameters. For t=1,...,p, find the best model using MSE on Hitters.train[folds!=j,]
+  #This corresponds to steps 2a-c in slide Session 7-10
+  #Note: "!=" means "not equal to" in R
+  best.fit=regsubsets(Salary~.,data=Hitters.train[folds!=j,],nvmax=p)
+  #For t=1,...,p, evaluate the best model using t predictors on fold j (Hitters.train[folds==j,])
+  #This corresponds to step 2d in the slides
+  for(t in 1:p){
+    pred=predict.regsubsets(best.fit,Hitters.train[folds==j,],t)
+    actual=Hitters.train$Salary[folds==j]
+    #cv.errors[j,t] represents the MSE from the best model using t parameters evaluated on fold j
+    #(see step 2d of slides)
+    cv.errors[j,t]=mean((actual-pred)^2)
+  }
+}
+
+#average MSEs across the folds j=1,...,k (step 2e)
+#"apply(cv.errors,2,mean)": apply the "mean" functions to the columns of matrix cv.errors
+#note: the second argument specifies whether we should apply the function to "1" the rows, or "2" the columns
+mean.cv.errors=apply(cv.errors,2,mean)
+mean.cv.errors
+
+#compute the "best" number of parameters, t*, through minimizing CV MSEs over t=1,...,p (step 3)
+best.model = which.min(mean.cv.errors)
+
+#find the best model with t* predictors using entire training dataset (step 4)
+regfit.full=regsubsets(Salary~.,data=Hitters.train, nvmax=19)
+
+#evaluate MSE of final chosen model on test dataset (step 5)
+pred=predict.regsubsets(regfit.full,Hitters[test,],best.model)
+actual = Hitters$Salary[test];
+mean((actual - pred)^2) #test set MSE
+
+###########################################################
+#### Ridge and Lasso Regression
+###########################################################
+#prepare the arguments for glmnet()
+x=model.matrix(Salary~.,Hitters)[,-1]
+#head(x)
+y=Hitters$Salary
+
+#install.packages("glmnet")
+library(glmnet)
+#Ridge and Lasso regression have a tuneable parameter: lambda (See Session 7-19)
+#We wish to choose the best model using CV among lambda=10^-2,10^-1,...,10^10
+grid=10^(-2:10) #set sequence of lambdas we want to test
+
+set.seed(65)
+#Use 10-fold CV to choose the best value of lambda for ridge regression
+#For the command below, alpha=0: ridge regression, alpha=1: lasso regression
+cv.out=cv.glmnet(x[train,],y[train],alpha=0,lambda=grid,nfolds=10) 
+plot(cv.out)
+bestlam=cv.out$lambda.min
+
+#Train model with best value of lambda on the training set
+ridge.mod=glmnet(x[train,],y[train],alpha=0,lambda=bestlam)
+
+#Evaluate this model on the test set
+pred=predict(ridge.mod,x[test,])
+actual = y[test]
+mean((actual-pred)^2) 
+
+##########################################################
+##########################################################
+
+# 
+
+# The Stock Market Data
+
+library(ISLR)
+names(Smarket)
+dim(Smarket)
+head(Smarket)
+summary(Smarket)
+pairs(Smarket)
+cor(Smarket)  ##This line won't work since one of variables is not numerical.
+cor(Smarket[,-9])
+attach(Smarket)
+plot(Volume)
+
+Smarket %>% select(Year) %>% distinct()
+
+# K-Nearest Neighbors
+train=(Year<2005) ##Set train set to be the year before 2005
+Smarket.2005=Smarket[!train,]
+dim(Smarket.2005)
+Direction.2005=Direction[!train]
+library(class)
+train.X=cbind(Lag1,Lag2)[train,] ## This means we only use Lag1 and Lag2 in our knn
+test.X=cbind(Lag1,Lag2)[!train,]
+train.Direction=Direction[train]
+set.seed(1)
+knn.pred=knn(train.X,test.X,train.Direction,k=1)
+table(knn.pred,Direction.2005)
+(83+43)/252
+knn.pred=knn(train.X,test.X,train.Direction,k=3)
+table(knn.pred,Direction.2005)
+mean(knn.pred==Direction.2005)           
+
