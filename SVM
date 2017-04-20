@@ -1,0 +1,54 @@
+rm(list=ls(all=TRUE))
+
+#install.packages("mlbench")
+require(mlbench)
+require(e1071)
+
+#uploading data
+data("BreastCancer")
+BC <- subset(BreastCancer, select=-Id) 
+table(is.na(BC))
+BC<-na.omit(BC)
+
+#diving into training and test set
+set.seed(1)
+train=sample(nrow(BC),nrow(BC)*0.7)
+
+model <- svm(Class ~ ., data=BC[train,], cross=10,scale=TRUE) 
+summary(model)
+BC<-as.data.frame(BC,na.omit=TRUE)
+ypred=predict(model,BC[-train,])
+sum(diag(table(predict=ypred, truth=BC[-train,10])))/nrow(BC[-train,])
+
+#repeating the procedure 50 times
+accuracy<-c()
+for(i in 1:50){
+  train=sample(nrow(BC),nrow(BC)*0.7)
+  model <- svm(Class ~ ., data=BC[train,], cross=10,scale=TRUE) 
+  BC<-as.data.frame(BC,na.omit=TRUE)
+  ypred=predict(model,BC[-train,])
+  accuracy[i]=sum(diag(table(predict=ypred, truth=BC[-train,10])))/nrow(BC[-train,])
+}
+mean(accuracy)
+sd(accuracy)
+
+mean_t<-c()
+sd_t<-c()
+for(j in seq(from=0.5,to=0.95,by=0.05)){
+  accuracy<-c()
+  for(i in 1:50){
+    train=sample(nrow(BC),nrow(BC)*j)
+    model <- svm(Class ~ ., data=BC[train,], cross=10,scale=TRUE) 
+    BC<-as.data.frame(BC,na.omit=TRUE)
+    ypred=predict(model,BC[-train,])
+    accuracy[i]=sum(diag(table(predict=ypred, truth=BC[-train,10])))/nrow(BC[-train,])
+  }
+  mean_t[length(mean_t)+1]=mean(accuracy)
+  sd_t[length(sd_t)+1]=sd(accuracy)
+}
+
+0.35*50000
+50000*18+1
+
+require(ggplot2)
+ggplot()+geom_point(aes(x=seq(from=0.5,to=0.95,by=0.05),y=mean_t))+ggtitle("Mean accuracy v. Data split")
