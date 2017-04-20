@@ -1,0 +1,176 @@
+rm(list=ls(all=TRUE))
+
+#datapreparation
+library(MASS)
+crime<-Boston
+crime$level<-ifelse(crime$crim<median(crime$crim),0,1)
+crime$level<-as.factor(crime$level)
+Boston$level<-as.factor(ifelse(Boston$crim<median(Boston$crim),0,1))
+
+#regression tree
+set.seed(1)
+train = sample (1: nrow(Boston ), nrow(Boston )/2)
+tree.boston =tree(level???.-crim,Boston ,subset =train)
+summary (tree.boston )
+plot(tree.boston )
+text(tree.boston ,pretty =0)
+
+#randomForest
+library (randomForest)
+set.seed (1)
+bag.boston =randomForest(level???.-crim,data=Boston ,subset =train ,
+                           mtry=13, importance =TRUE)
+bag.boston
+yhat.bag = predict (bag.boston ,newdata =Boston [-train ,])
+plot(yhat.bag , boston.test)
+
+
+#logistic regression
+glm.fit=glm(level~.-crim, data=crime,family =binomial )
+summary (glm.fit )
+glm.probs=predict(glm.fit)
+glm.pred=rep("Low crime",506)
+glm.pred[glm.probs >.5]="High Crime"
+(table(glm.pred ,crime$level)[1,2]+table(glm.pred ,crime$level)[2,1])/506
+
+#classification tree
+set.seed (1)
+train = sample(1: nrow(crime ), nrow(crime)/2)
+set.seed (1)
+train = sample (1: nrow(Boston ), nrow(Boston )/2)
+tree.boston =tree(medv???.,Boston ,subset =train)
+
+library(tree)
+tree.level=tree(level~.-crim, data=crime)
+tree.pred=predict(tree.level,data=crime,type ="class")
+sum(diag(table(tree.pred ,crime$level)))/506
+
+#bagging tree
+library (randomForest)
+crime.test=crime [-train ,"level"]
+bag.boston=randomForest(level~.-crim,data=crime ,subset =train,mtry=13, importance =TRUE)
+yhat.bag = predict (bag.boston ,newdata=crime[-train ,],subset=-train)
+plot(yhat.bag,crime.test)
+abline (0,1)
+table(yhat.bag,crime.test)
+(253-13)/253
+
+#random Forest
+crime.test=crime [-train ,"level"]
+bag.boston=randomForest(level~.-crim,data=crime ,subset =train, importance =TRUE)
+yhat.bag = predict (bag.boston ,newdata=crime[-train ,],subset=-train)
+plot(yhat.bag,crime.test)
+abline (0,1)
+table(yhat.bag,crime.test)
+
+#boosted stubs
+library (gbm)
+boston.test=Boston[-train,"level"]
+set.seed (1)
+boost.boston=gbm(level~.-crim,data=crime[train,],
+  distribution="bernoulli",n.trees=5000,interaction.depth=6)
+yhat.boost=predict(boost.boston ,newdata =Boston [-train ,],
+                    n.trees =5000)
+mean((yhat.boost-boston.test)^2)
+
+library(DAAG)
+library(ggplot2)
+library(MASS)
+
+require(DAAG)
+require(ggplot2)
+require(MASS)
+# This code implements reduced rank LDA (Fisher Discriminant Analysis)
+# It can reproduce the subplots of Figure 4.8 in HTF by specifing coordinates a,b 
+# For example, a=1,b=3 reproduces the top-left sub-figure of Figure 4.8
+
+a=1 # First Fisher coordinate to plot
+b=2 # second Fisher coordinate to plot
+
+################################################################
+# First download the training data from the HTF website
+url<-"http://www-stat.stanford.edu/~tibs/ElemStatLearn/datasets/vowel.train"
+vtrain<-read.table(url,header=TRUE,sep=',')
+vtrain<-as.data.frame(vtrain)
+# columns are row.names,y,x.1,x.2,x.3,x.4,x.5,x.6,x.7,x.8,x.9,x.10
+# y is the class, and x.1 to x.10 are predictors
+
+# Now download the test data
+url<-"http://www-stat.stanford.edu/~tibs/ElemStatLearn/datasets/vowel.test"
+vtest<-read.table(url,header=TRUE,sep=',')
+vtest<-as.data.frame(vtest)
+#################################################################
+
+# Now find the Fisher discriminant directions using the "lda" function
+
+ldatrain<-lda(y~x.1+x.2+x.3+x.4+x.5+x.6+x.7+x.8+x.9+x.10, data=vtrain)
+
+ldavalues<-predict(ldatrain, newdata=vtest, type='class')
+
+dataset.lda <- data.frame(category=vtest$y, lda=predict(ldatrain, newdata=vtest, type='class'))
+color <- c("#60FFFF", "#B52000", "#FF99FF", "#20B500", "#FFCA00",
+           "red", "green", "blue", "grey75", "#FFB2B2", "#928F52")
+
+ggplot()+
+  geom_point(aes(x=ldavalues$x[,1],y=ldavalues$x[,2],colour=ldavalues$class))+
+  ggtitle("Linear Discriminant Analysis")+labs(x="Coordinate 1",y="Coordinate 2")+
+  scale_color_manual(values=color)
+
+MSE_train=c()
+MSE_test=c()
+Dimensionality=c(seq(1:11))
+
+for(i in 1:11){
+  ldavaluestrain<-predict(ldatrain,newdata=vtrain,type='class',dimen=i)
+  ldavaluestest<-predict(ldatrain,newdata=vtest,type='class',dimen=i)
+  lda.class.train<-ldavaluestrain$class
+  lda.class.test<-ldavaluestest$class
+  MSE_train[i]=as.numeric((length(vtrain$y)-
+                             sum(diag(table(lda.class.train,vtrain$y))))/length(vtrain$y))
+  MSE_test[i]=as.numeric((length(vtest$y)-
+                            sum(diag(table(lda.class.test,vtest$y))))/length(vtest$y))
+}
+
+ggplot()+
+  geom_line(aes(x=Dimensionality,y=MSE_train,colour="MSE_train"))+
+  geom_line(aes(x=Dimensionality,y=MSE_test,colour="MSE_test"))+
+  ggtitle("LDA and Dimension Reduction")+
+  labs(x="Dimensionality",y="MSE")+
+  geom_point(aes(x=Dimensionality,y=MSE_train))+
+  geom_point(aes(x=Dimensionality,y=MSE_test))
+
+
+sum(ldavalues$posterior[,1]>=.5)  # posterior is an n x K=2  matrix of poserior probs (n = # of data points)
+sum(ldavalues$posterior[,1]<.5)
+ldavalues$posterior[1:20,1]
+lda.class[1:20]
+sum(lda.pred$posterior[,1]>.9) # Using .9 as our threshold to predict market will decrease
+
+
+
+
+color
+da <- vtrain[, -1]
+
+Y <- da[, 1]
+X <- da[, -1]
+K <- length(unique(Y))
+N <- length(Y)
+p <- ncol(X)
+mu.k <- do.call("rbind", lapply(1:K, function(k) colMeans(X[Y == k,])))
+mu.bar <- colMeans(mu.k)
+mu.k.tmp <- matrix(rep(t(mu.k), N / K), nrow = ncol(mu.k))
+Sigma <- (t(X) - mu.k.tmp) %*% t(t(X) - mu.k.tmp) / (N - K)
+Sigma.eigen <- eigen(Sigma)
+Sigma.inv.sqrt <- Sigma.eigen$vectors %*% diag(1/sqrt(Sigma.eigen$values)) %*%
+  t(Sigma.eigen$vectors)
+X.star <- t(Sigma.inv.sqrt %*% (t(X) - mu.bar))
+mu.k.star <- t(Sigma.inv.sqrt %*% (t(mu.k) - mu.bar))
+M <- mu.k.star
+M.svd <- eigen(t(M) %*% M / K)
+X.new <- X.star %*% M.svd$vectors
+mu.k.new <- mu.k.star %*% M.svd$vectors
+plot(-X.new[, 1], X.new[, 2], col = color[Y], pch = Y + 1,
+     main = "Linear Discriminant Analysis",
+     xlab = "Coordinate 1 for Training Data", ylab = "Coordinate 2 for Training Data")
+points(-mu.k.new[, 1], mu.k.new[, 2], col = color[Y], pch = 19, cex = 1.5)
